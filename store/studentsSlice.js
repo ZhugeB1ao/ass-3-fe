@@ -1,227 +1,139 @@
-import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import {
+  createStudent as createStudentRequest,
+  deleteStudent as deleteStudentRequest,
+  getStudentById,
+  getStudents,
+  updateStudent as updateStudentRequest,
+} from "../services/studentsService";
 
-const BASE_URL = 'http://172.20.10.4:3000';
-
-const toStringValue = (value) => {
-  if (value === undefined || value === null) {
-    return '';
-  }
-  return String(value);
-};
-
-const toNumberOrNull = (value) => {
-  const num = Number(value);
-  return Number.isFinite(num) ? num : null;
-};
-
-const normalizeStudent = (raw = {}) => {
-  return {
-    id: toStringValue(raw.id ?? raw.Id ?? raw.ID),
-    name: toStringValue(raw.name ?? raw.Name),
-    university: toStringValue(raw.university ?? raw.University),
-    email: toStringValue(raw.email ?? raw.Email),
-    major: toStringValue(raw.major ?? raw.Major),
-    gpa: toStringValue(raw.gpa ?? raw.GPA),
-  };
-};
-
-const unwrapPayload = (payload) => {
-  if (payload && payload.data !== undefined) {
-    return payload.data;
-  }
-  return payload;
-};
-
-const normalizeList = (payload) => {
-  if (Array.isArray(payload)) {
-    return payload.map(normalizeStudent);
-  }
-  if (payload && Array.isArray(payload.data)) {
-    return payload.data.map(normalizeStudent);
-  }
-  if (payload && Array.isArray(payload.students)) {
-    return payload.students.map(normalizeStudent);
-  }
-  return [];
-};
-
-const toApiPayload = (student) => ({
-  Id: student.id,
-  Name: student.name,
-  University: student.university,
-  Email: student.email,
-  Major: student.major || null,
-  GPA: toNumberOrNull(student.gpa),
-});
-
-const readResponseText = async (response) => {
-  try {
-    return await response.text();
-  } catch (error) {
-    return '';
-  }
-};
-
-const fetchJson = async (url, options = {}) => {
-  const response = await fetch(url, options);
-  if (!response.ok) {
-    const text = await readResponseText(response);
-    throw new Error(text || `Request failed (${response.status})`);
-  }
-  if (response.status === 204) {
-    return null;
-  }
-  const text = await readResponseText(response);
-  if (!text) {
-    return null;
-  }
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    return null;
-  }
+const initialState = {
+  items: [],
+  status: "idle",
+  error: null,
+  mutationStatus: "idle",
+  mutationError: null,
+  selectedItem: null,
+  detailStatus: "idle",
+  detailError: null,
 };
 
 export const fetchStudents = createAsyncThunk(
-  'students/fetchAll',
+  "students/fetchStudents",
   async () => {
-    const data = await fetchJson(`${BASE_URL}/students`);
-    return normalizeList(data);
-  }
-);
-
-export const searchStudents = createAsyncThunk(
-  'students/search',
-  async (name) => {
-    const params = new URLSearchParams({ name });
-    const data = await fetchJson(
-      `${BASE_URL}/students/search?${params.toString()}`
-    );
-    return normalizeList(data);
-  }
+    return await getStudents();
+  },
 );
 
 export const createStudent = createAsyncThunk(
-  'students/create',
-  async (student) => {
-    const data = await fetchJson(`${BASE_URL}/students`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toApiPayload(student)),
-    });
-    return normalizeStudent(unwrapPayload(data) || student);
-  }
+  "students/createStudent",
+  async (values) => {
+    return await createStudentRequest(values);
+  },
+);
+
+export const fetchStudentById = createAsyncThunk(
+  "students/fetchStudentById",
+  async (id) => {
+    return await getStudentById(id);
+  },
 );
 
 export const updateStudent = createAsyncThunk(
-  'students/update',
-  async (student) => {
-    const data = await fetchJson(
-      `${BASE_URL}/students/${encodeURIComponent(student.id)}`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(toApiPayload(student)),
-      }
-    );
-    return normalizeStudent(unwrapPayload(data) || student);
-  }
+  "students/updateStudent",
+  async ({ id, values }) => {
+    return await updateStudentRequest(id, values);
+  },
 );
 
 export const deleteStudent = createAsyncThunk(
-  'students/delete',
+  "students/deleteStudent",
   async (id) => {
-    await fetchJson(`${BASE_URL}/students/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    });
-    return id;
-  }
+    return await deleteStudentRequest(id);
+  },
 );
 
-const upsertStudent = (items, student) => {
-  const index = items.findIndex((item) => item.id === student.id);
-  if (index >= 0) {
-    items[index] = student;
-    return;
-  }
-  items.unshift(student);
-};
-
 const studentsSlice = createSlice({
-  name: 'students',
-  initialState: {
-    items: [],
-    status: 'idle',
-    error: null,
-    actionStatus: 'idle',
-    actionError: null,
+  name: "students",
+  initialState,
+  reducers: {
+    clearStudentMutationState(state) {
+      state.mutationStatus = "idle";
+      state.mutationError = null;
+    },
+    clearStudentDetails(state) {
+      state.selectedItem = null;
+      state.detailStatus = "idle";
+      state.detailError = null;
+    },
   },
-  reducers: {},
   extraReducers: (builder) => {
     builder
       .addCase(fetchStudents.pending, (state) => {
-        state.status = 'loading';
+        state.status = "loading";
         state.error = null;
       })
       .addCase(fetchStudents.fulfilled, (state, action) => {
-        state.status = 'succeeded';
+        state.status = "succeeded";
         state.items = action.payload;
       })
       .addCase(fetchStudents.rejected, (state, action) => {
-        state.status = 'failed';
-        state.error = action.error?.message || 'Khong the tai du lieu.';
+        state.status = "failed";
+        state.error = action.error.message || "Không thể tải sinh viên.";
       })
-      .addCase(searchStudents.pending, (state) => {
-        state.status = 'loading';
-        state.error = null;
+      .addCase(fetchStudentById.pending, (state) => {
+        state.detailStatus = "loading";
+        state.detailError = null;
+        state.selectedItem = null;
       })
-      .addCase(searchStudents.fulfilled, (state, action) => {
-        state.status = 'succeeded';
-        state.items = action.payload;
+      .addCase(fetchStudentById.fulfilled, (state, action) => {
+        state.detailStatus = "succeeded";
+        state.selectedItem = action.payload;
       })
-      .addCase(searchStudents.rejected, (state, action) => {
-        state.status = 'failed';
-        state.error = action.error?.message || 'Khong the tim kiem.';
+      .addCase(fetchStudentById.rejected, (state, action) => {
+        state.detailStatus = "failed";
+        state.detailError =
+          action.error.message || "Không thể tải chi tiết sinh viên.";
       })
       .addCase(createStudent.pending, (state) => {
-        state.actionStatus = 'loading';
-        state.actionError = null;
+        state.mutationStatus = "loading";
+        state.mutationError = null;
       })
-      .addCase(createStudent.fulfilled, (state, action) => {
-        state.actionStatus = 'succeeded';
-        upsertStudent(state.items, action.payload);
+      .addCase(createStudent.fulfilled, (state) => {
+        state.mutationStatus = "succeeded";
       })
       .addCase(createStudent.rejected, (state, action) => {
-        state.actionStatus = 'failed';
-        state.actionError =
-          action.error?.message || 'Khong the tao sinh vien.';
+        state.mutationStatus = "failed";
+        state.mutationError =
+          action.error.message || "Không thể tạo sinh viên.";
       })
       .addCase(updateStudent.pending, (state) => {
-        state.actionStatus = 'loading';
-        state.actionError = null;
+        state.mutationStatus = "loading";
+        state.mutationError = null;
       })
-      .addCase(updateStudent.fulfilled, (state, action) => {
-        state.actionStatus = 'succeeded';
-        upsertStudent(state.items, action.payload);
+      .addCase(updateStudent.fulfilled, (state) => {
+        state.mutationStatus = "succeeded";
       })
       .addCase(updateStudent.rejected, (state, action) => {
-        state.actionStatus = 'failed';
-        state.actionError = action.error?.message || 'Khong the cap nhat.';
+        state.mutationStatus = "failed";
+        state.mutationError =
+          action.error.message || "Không thể cập nhật sinh viên.";
       })
       .addCase(deleteStudent.pending, (state) => {
-        state.actionStatus = 'loading';
-        state.actionError = null;
+        state.mutationStatus = "loading";
+        state.mutationError = null;
       })
-      .addCase(deleteStudent.fulfilled, (state, action) => {
-        state.actionStatus = 'succeeded';
-        state.items = state.items.filter((item) => item.id !== action.payload);
+      .addCase(deleteStudent.fulfilled, (state) => {
+        state.mutationStatus = "succeeded";
       })
       .addCase(deleteStudent.rejected, (state, action) => {
-        state.actionStatus = 'failed';
-        state.actionError =
-          action.error?.message || 'Khong the xoa sinh vien.';
+        state.mutationStatus = "failed";
+        state.mutationError =
+          action.error.message || "Không thể xóa sinh viên.";
       });
   },
 });
 
+export const { clearStudentDetails, clearStudentMutationState } =
+  studentsSlice.actions;
 export default studentsSlice.reducer;
